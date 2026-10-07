@@ -38,6 +38,7 @@ namespace
     const char* SER_HOSTCOVERS = "theme/hostpagecovers";
     const char* SER_MODE = "theme/mode";
     const char* SER_SCALE = "theme/scalepercent";
+    const char* SER_LIBRARY_GRID = "theme/librarygrid";
 
     /**
      * Perceived brightness, not the average of the channels: green reads far lighter than blue
@@ -99,6 +100,7 @@ Theme::Theme(QObject* parent)
     }
     m_ReduceAnimations = settings.value(SER_REDUCE, false).toBool();
     m_StartupAnimation = settings.value(SER_STARTUP, true).toBool();
+    m_LibraryGrid = settings.value(SER_LIBRARY_GRID, true).toBool();
     // The waves by default: what 7.0.0 introduced. The covers are 6.5.1's look, on request.
     m_HostPageCovers = settings.value(SER_HOSTCOVERS, false).toBool();
     // Dark by default: it is what every install had up to 6.5, and a theme that changes on its
@@ -671,6 +673,17 @@ void Theme::setHostPageCovers(bool on)
     emit changed();
 }
 
+void Theme::setLibraryGrid(bool on)
+{
+    if (on == m_LibraryGrid) {
+        return;
+    }
+
+    m_LibraryGrid = on;
+    save();
+    emit libraryGridChanged();
+}
+
 void Theme::save() const
 {
     // Written on every change rather than at teardown: a process that is killed never reaches
@@ -688,4 +701,5 @@ void Theme::save() const
     settings.setValue(SER_HOSTCOVERS, m_HostPageCovers);
     settings.setValue(SER_MODE, m_Mode);
     settings.setValue(SER_SCALE, m_ScalePercent);
+    settings.setValue(SER_LIBRARY_GRID, m_LibraryGrid);
 }
