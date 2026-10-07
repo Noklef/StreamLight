@@ -112,6 +112,8 @@ class Theme : public QObject
 
     // Library layout, shared by hosts and remembered across application restarts.
     Q_PROPERTY(bool libraryGrid READ libraryGrid WRITE setLibraryGrid NOTIFY libraryGridChanged)
+    Q_PROPERTY(int libraryCoverSize READ libraryCoverSize WRITE setLibraryCoverSize NOTIFY libraryAppearanceChanged)
+    Q_PROPERTY(bool libraryShowTitles READ libraryShowTitles WRITE setLibraryShowTitles NOTIFY libraryAppearanceChanged)
 
     /**
      * How much bigger than its design size everything should be drawn, for the window the app
@@ -192,6 +194,8 @@ public:
     bool reduceAnimations() const { return m_ReduceAnimations; }
     bool startupAnimation() const { return m_StartupAnimation; }
     bool libraryGrid() const { return m_LibraryGrid; }
+    int libraryCoverSize() const { return m_LibraryCoverSize; }
+    bool libraryShowTitles() const { return m_LibraryShowTitles; }
 
     qreal uiScale() const { return m_UiScale; }
 
@@ -199,6 +203,8 @@ public:
     void setReduceAnimations(bool on);
     void setStartupAnimation(bool on);
     void setLibraryGrid(bool on);
+    void setLibraryCoverSize(int size);
+    void setLibraryShowTitles(bool on);
     void setUiScale(qreal s);
 
     /**
@@ -221,6 +227,7 @@ public:
 signals:
     void changed();
     void libraryGridChanged();
+    void libraryAppearanceChanged();
     void uiScaleChanged();
 
 private:
@@ -230,6 +237,8 @@ private:
     bool   m_ReduceAnimations = false;
     bool   m_StartupAnimation = true;
     bool   m_LibraryGrid = true;
+    int    m_LibraryCoverSize = 1;
+    bool   m_LibraryShowTitles = true;
 
     // 1.0 until AppShell has a width to measure. Not persisted: it describes the window the
     // app happens to be in, not anything the user chose.

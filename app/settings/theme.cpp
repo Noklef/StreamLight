@@ -18,6 +18,8 @@ namespace
     const char* SER_REDUCE = "theme/reduceanimations";
     const char* SER_STARTUP = "theme/startupanimation";
     const char* SER_LIBRARY_GRID = "theme/librarygrid";
+    const char* SER_LIBRARY_COVER_SIZE = "theme/librarycoversize";
+    const char* SER_LIBRARY_SHOW_TITLES = "theme/libraryshowtitles";
 
     /**
      * Perceived brightness, not the average of the channels: green reads far lighter than blue
@@ -45,6 +47,8 @@ Theme::Theme(QObject* parent)
     m_ReduceAnimations = settings.value(SER_REDUCE, false).toBool();
     m_StartupAnimation = settings.value(SER_STARTUP, true).toBool();
     m_LibraryGrid = settings.value(SER_LIBRARY_GRID, true).toBool();
+    m_LibraryCoverSize = qBound(0, settings.value(SER_LIBRARY_COVER_SIZE, 1).toInt(), 2);
+    m_LibraryShowTitles = settings.value(SER_LIBRARY_SHOW_TITLES, true).toBool();
 }
 
 Theme* Theme::get(QQmlEngine* qmlEngine)
@@ -153,6 +157,29 @@ void Theme::setLibraryGrid(bool on)
     emit libraryGridChanged();
 }
 
+void Theme::setLibraryCoverSize(int size)
+{
+    size = qBound(0, size, 2);
+    if (size == m_LibraryCoverSize) {
+        return;
+    }
+
+    m_LibraryCoverSize = size;
+    save();
+    emit libraryAppearanceChanged();
+}
+
+void Theme::setLibraryShowTitles(bool on)
+{
+    if (on == m_LibraryShowTitles) {
+        return;
+    }
+
+    m_LibraryShowTitles = on;
+    save();
+    emit libraryAppearanceChanged();
+}
+
 void Theme::save() const
 {
     // Written on every change rather than at teardown: a process that is killed never reaches
@@ -162,4 +189,6 @@ void Theme::save() const
     settings.setValue(SER_REDUCE, m_ReduceAnimations);
     settings.setValue(SER_STARTUP, m_StartupAnimation);
     settings.setValue(SER_LIBRARY_GRID, m_LibraryGrid);
+    settings.setValue(SER_LIBRARY_COVER_SIZE, m_LibraryCoverSize);
+    settings.setValue(SER_LIBRARY_SHOW_TITLES, m_LibraryShowTitles);
 }
