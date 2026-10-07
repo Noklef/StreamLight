@@ -20,6 +20,10 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
+      - name: Test library selection and session logic
+        shell: pwsh
+        run: node --test tests/ui/library-layout.test.cjs
+
       - name: Install Qt 6.8.3
         uses: jurplel/install-qt-action@v4
         with:

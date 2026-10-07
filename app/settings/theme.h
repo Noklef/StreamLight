@@ -110,6 +110,9 @@ class Theme : public QObject
      */
     Q_PROPERTY(bool startupAnimation READ startupAnimation WRITE setStartupAnimation NOTIFY changed)
 
+    // Library layout, shared by hosts and remembered across application restarts.
+    Q_PROPERTY(bool libraryGrid READ libraryGrid WRITE setLibraryGrid NOTIFY libraryGridChanged)
+
     /**
      * How much bigger than its design size everything should be drawn, for the window the app
      * is currently in. AppShell computes it from the window width and writes it here; the
@@ -188,12 +191,14 @@ public:
 
     bool reduceAnimations() const { return m_ReduceAnimations; }
     bool startupAnimation() const { return m_StartupAnimation; }
+    bool libraryGrid() const { return m_LibraryGrid; }
 
     qreal uiScale() const { return m_UiScale; }
 
     void setAccent(const QColor& c);
     void setReduceAnimations(bool on);
     void setStartupAnimation(bool on);
+    void setLibraryGrid(bool on);
     void setUiScale(qreal s);
 
     /**
@@ -215,6 +220,7 @@ public:
 
 signals:
     void changed();
+    void libraryGridChanged();
     void uiScaleChanged();
 
 private:
@@ -223,6 +229,7 @@ private:
     QColor m_Accent;
     bool   m_ReduceAnimations = false;
     bool   m_StartupAnimation = true;
+    bool   m_LibraryGrid = true;
 
     // 1.0 until AppShell has a width to measure. Not persisted: it describes the window the
     // app happens to be in, not anything the user chose.

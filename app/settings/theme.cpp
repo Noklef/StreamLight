@@ -17,6 +17,7 @@ namespace
     const char* SER_ACCENT = "theme/accent";
     const char* SER_REDUCE = "theme/reduceanimations";
     const char* SER_STARTUP = "theme/startupanimation";
+    const char* SER_LIBRARY_GRID = "theme/librarygrid";
 
     /**
      * Perceived brightness, not the average of the channels: green reads far lighter than blue
@@ -43,6 +44,7 @@ Theme::Theme(QObject* parent)
     }
     m_ReduceAnimations = settings.value(SER_REDUCE, false).toBool();
     m_StartupAnimation = settings.value(SER_STARTUP, true).toBool();
+    m_LibraryGrid = settings.value(SER_LIBRARY_GRID, true).toBool();
 }
 
 Theme* Theme::get(QQmlEngine* qmlEngine)
@@ -140,6 +142,17 @@ void Theme::setStartupAnimation(bool on)
     emit changed();
 }
 
+void Theme::setLibraryGrid(bool on)
+{
+    if (on == m_LibraryGrid) {
+        return;
+    }
+
+    m_LibraryGrid = on;
+    save();
+    emit libraryGridChanged();
+}
+
 void Theme::save() const
 {
     // Written on every change rather than at teardown: a process that is killed never reaches
@@ -148,4 +161,5 @@ void Theme::save() const
     settings.setValue(SER_ACCENT, m_Accent.name());
     settings.setValue(SER_REDUCE, m_ReduceAnimations);
     settings.setValue(SER_STARTUP, m_StartupAnimation);
+    settings.setValue(SER_LIBRARY_GRID, m_LibraryGrid);
 }

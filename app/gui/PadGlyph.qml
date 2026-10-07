@@ -9,7 +9,7 @@ import SdlGamepadKeyNavigation 1.0
 Item {
     id: glyph
 
-    property string buttonKey: ""   // "A","B","X","Y","LB","RB","LT","RT","START","SELECT","RS" (right stick click)
+    property string buttonKey: ""   // "A","B","X","Y","LB","RB","LT","RT","START","SELECT","LS","RS"
     property string label: ""        // text fallback
     property string glyphSet: SdlGamepadKeyNavigation.controllerType // "xbox"/"ps"/"switch"/...
     // Height of a face button. Shoulders and the Select/Start pills are wider than they are
@@ -69,7 +69,7 @@ Item {
         border.width: 1
         Text {
             anchors.centerIn: parent
-            text: glyph.label
+            text: glyph.buttonKey === "LS" ? (glyph._ps ? "L3" : "LS") : glyph.label
             color: Theme.text
             font.family: Theme.family
             font.pixelSize: Math.max(11, glyph.size - 11)
