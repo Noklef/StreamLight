@@ -45,6 +45,7 @@ Item {
         : buttonKey === "RT"     ? (_ps ? "qrc:/res/pad_ps_r2.svg"       : _sw ? "qrc:/res/pad_switch_zr.svg"    : "qrc:/res/pad_xbox_rt.svg")
         : buttonKey === "SELECT" ? (_ps ? "qrc:/res/pad_ps_create.svg"   : _sw ? "qrc:/res/pad_switch_minus.svg" : "qrc:/res/pad_xbox_view.svg")
         : buttonKey === "START"  ? (_ps ? "qrc:/res/pad_ps_options.svg"  : _sw ? "qrc:/res/pad_switch_plus.svg"  : "qrc:/res/pad_xbox_start.svg")
+        : buttonKey === "LS"     ? (_ps ? "qrc:/res/pad_ps_l3.svg"       : _sw ? "qrc:/res/pad_switch_ls.svg"    : "qrc:/res/pad_xbox_ls.svg")
         : buttonKey === "RS"     ? (_ps ? "qrc:/res/pad_ps_r3.svg"       : _sw ? "qrc:/res/pad_switch_rs.svg"    : "qrc:/res/pad_xbox_rs.svg")
         : ""
 
@@ -69,7 +70,7 @@ Item {
         border.width: 1
         Text {
             anchors.centerIn: parent
-            text: glyph.buttonKey === "LS" ? (glyph._ps ? "L3" : "LS") : glyph.label
+            text: glyph.label
             color: Theme.text
             font.family: Theme.family
             font.pixelSize: Math.max(11, glyph.size - 11)
