@@ -3,10 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const { qmlSource } = require('./qml-source.cjs');
 
 // Execute the production QML's JavaScript against small view/session doubles. This
 // checks selection and launch behaviour without installing Qt on the developer's PC.
-const source = fs.readFileSync(path.join(__dirname, '../../app/gui/AppsScreen.qml'), 'utf8');
+const { source, qmlFunction, pageKeyHandler } = qmlSource('AppsScreen.qml');
 
 test('grid covers reuse HeroCover styling without an idle frame or inner padding', () => {
     const start = source.indexOf('id: tileFrame');
@@ -170,17 +171,6 @@ test('Interface controls bind to persisted preferences with Medium and titles-on
     assert.match(header, /Q_PROPERTY\(bool libraryShowTitles READ libraryShowTitles WRITE setLibraryShowTitles NOTIFY libraryAppearanceChanged\)/);
 });
 
-function qmlFunction(name, globals) {
-    const signature = new RegExp(`^([ \\t]*)function ${name}\\([^\\n]*\\) \\{`, 'm');
-    const match = source.match(signature);
-    assert.ok(match, `Missing QML function: ${name}`);
-    const start = match.index + match[1].length;
-    const end = source.indexOf(`\n${match[1]}}`, start);
-    assert.ok(end > start, `Missing function end: ${name}`);
-    const code = source.slice(start, end + match[1].length + 2);
-    return vm.runInNewContext(`(${code})`, globals);
-}
-
 function layoutFixture({ count = 8, selected = 5, lookup = selected } = {}) {
     const callbacks = [];
     const calls = [];
@@ -247,14 +237,6 @@ test('rapid toggles do not scroll or focus the now-inactive layout', () => {
     f.callbacks.forEach((callback) => callback());
     assert.deepEqual(f.calls, [['grid', 5, 4], ['focus', 'grid']]);
 });
-
-function pageKeyHandler(globals) {
-    const match = source.match(/^([ \t]*)Keys\.onPressed: (function\(event\) \{)/m);
-    assert.ok(match, 'Missing page key handler');
-    const start = match.index + match[0].indexOf('function');
-    const end = source.indexOf(`\n${match[1]}}`, start);
-    return vm.runInNewContext(`(${source.slice(start, end + match[1].length + 2)})`, globals);
-}
 
 test('LS and V switch layout while X, pin, move, tabs and profiles keep their actions', () => {
     const calls = [];

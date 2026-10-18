@@ -20,9 +20,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
-      - name: Test library selection and session logic
+      # Every *.test.cjs under tests/ui (layout, search). A glob, not the directory: Node 22
+      # treats a directory argument as a file to run.
+      - name: Test library selection, session and search logic
         shell: pwsh
-        run: node --test tests/ui/library-layout.test.cjs
+        run: node --test "tests/ui/*.test.cjs"
 
       - name: Install Qt 6.8.3
         uses: jurplel/install-qt-action@v4
@@ -35,6 +37,39 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      - name: Test library search matching
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testDir = Join-Path $env:GITHUB_WORKSPACE 'build\tests-library'
+          New-Item -ItemType Directory -Force -Path $testDir | Out-Null
+
+          Push-Location $testDir
+          try {
+            & qmake.exe (Join-Path $env:GITHUB_WORKSPACE 'tests\library\searchmatch.pro') 'CONFIG+=release'
+            if ($LASTEXITCODE -ne 0) { throw "qmake failed with exit code $LASTEXITCODE" }
+
+            & (Join-Path $env:GITHUB_WORKSPACE 'scripts\jom.exe') -j4
+            if ($LASTEXITCODE -ne 0) { throw "jom failed with exit code $LASTEXITCODE" }
+
+            $exe = Get-ChildItem -Recurse -Filter 'tst_searchmatch.exe' | Select-Object -First 1
+            if (-not $exe) { throw "tst_searchmatch.exe was not built" }
+            # Qt's DLLs come from the install-qt-action PATH.
+            $output = & $exe.FullName 2>&1 | Out-String
+            Write-Host $output
+            if ($LASTEXITCODE -ne 0) {
+              # Logs need a login to read through the API; annotations do not.
+              $fails = ($output -split "`r?`n" | Select-String -Pattern '^FAIL!' -Context 0,3 |
+                        ForEach-Object { $_.ToString() }) -join "`n"
+              $fails = $fails.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Search matcher tests failed::$fails"
+              throw "tst_searchmatch failed: $LASTEXITCODE test(s) did not pass"
+            }
+          }
+          finally {
+            Pop-Location
+          }
 
       - name: Build StreamLight
         shell: pwsh
