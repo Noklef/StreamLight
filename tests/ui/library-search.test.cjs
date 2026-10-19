@@ -37,8 +37,8 @@ function searchFixture({ tab = 'all', count = 5, padActive = false, foundAt = 3 
         updateContinue() {},
     };
     const field = {
-        text: '', cursorPosition: 0,
-        forceActiveFocus() { calls.push(['focus', 'field']); },
+        text: '', cursorPosition: 0, activeFocus: false,
+        forceActiveFocus() { field.activeFocus = true; calls.push(['focus', 'field']); },
         insert(at, t) { field.text = field.text.slice(0, at) + t + field.text.slice(at); field.cursorPosition = at + t.length; },
         remove(from, to) { field.text = field.text.slice(0, from) + field.text.slice(to); field.cursorPosition = from; },
         clear() { field.text = ''; field.cursorPosition = 0; },
@@ -53,7 +53,8 @@ function searchFixture({ tab = 'all', count = 5, padActive = false, foundAt = 3 
         appGrid: view, searchField: field,
         searchDebounce: { stop() { calls.push(['debounce stopped']); } },
         get searching() { return globals.libraryTab === 'search'; },
-        focusLibrary() { calls.push(['focus', 'library']); },
+        get searchTyping() { return globals.searching && field.activeFocus; },
+        focusLibrary() { field.activeFocus = false; calls.push(['focus', 'library']); },
         openKeyboard() { globals.searchKeyboardOpen = true; calls.push(['keyboard']); },
         closeKeyboard() { globals.searchKeyboardOpen = false; },
     };
@@ -163,6 +164,17 @@ test('B closes the keyboard, then the search back to its tab with the find selec
     assert.deepEqual(saved(f), [], 'B is not a tab choice');
 });
 
+test('B in the field clears what was typed before it closes the search', () => {
+    const f = searchFixture({ tab: 'games' });
+    f.globals.enterSearch(false);
+    f.field.text = 'halo';
+    assert.equal(f.globals.backOut(), true);
+    assert.equal(f.field.text, '');
+    assert.equal(f.globals.searching, true);
+    assert.equal(f.globals.backOut(), true);
+    assert.equal(f.globals.libraryTab, 'games');
+});
+
 test('with no results, Done and B keep the field', () => {
     const f = searchFixture({ count: 0, padActive: true });
     f.globals.enterSearch(true);
@@ -263,6 +275,17 @@ test('the search field: Enter and Down apply now and go to the results, Escape c
 
     assert.equal(press('Key_Left'), false, 'the cursor keys stay the field\'s');
 
+    f.field.text = 'doom';
+    assert.equal(press('Key_F18'), true, 'Start is Done');
+    assert.equal(f.model.filterText, 'doom');
+    assert.deepEqual(f.calls.at(-1), ['focus', 'library']);
+    f.globals.enterSearch(false);
+    f.calls.length = 0;
+    assert.equal(press('Key_F13'), true, 'Select: not the settings of a selection out of sight');
+    assert.equal(press('Key_F19'), true, 'the right stick: no move either');
+    assert.deepEqual(f.calls, []);
+    f.field.text = 'halo';
+
     assert.equal(press('Key_Escape'), true);
     assert.equal(f.field.text, '');
     assert.equal(f.globals.searching, true, 'the first Escape only clears');
@@ -328,7 +351,19 @@ test('the status bar: keyboard prompts while it is up, Close search while search
                      [['A', 'oskType'], ['X', 'oskDelete'], ['Y', 'oskSpace'], ['START', 'oskDone'], ['B', 'back']]);
     assert.ok(keyboard.every((h) => typeof h.key === 'string'), 'ActionHint.keyLabel is a string');
 
-    const searching = hints({ ...base, searching: true, searchKeyboardOpen: false });
+    // Typing in the field, in Grid with a cover selected: none of the cover's prompts, whose
+    // keys would type letters.
+    const grid = { ...base, gridLayout: true, focusedAppName: 'Halo', focusedVerb: 'Play',
+                   focusedAppIsRunning: true, focusedPinnable: true, focusedPinned: false };
+    for (const [searchHasText, b] of [[true, 'Clear'], [false, 'Close search']]) {
+        const typing = hints({ ...grid, searching: true, searchTyping: true, searchHasText,
+                               searchKeyboardOpen: false });
+        assert.deepEqual(Array.from(typing, (h) => [h.btn, h.key, h.kind]),
+                         [['A', 'Enter', 'oskDone'], ['Y', '', 'settings'], ['B', 'Esc', 'back']]);
+        assert.equal(typing[2].act, b);
+    }
+
+    const searching = hints({ ...base, searching: true, searchTyping: false, searchKeyboardOpen: false });
     assert.equal(searching.find((h) => h.btn === 'B').act, 'Close search');
     assert.ok(searching.some((h) => h.kind === 'settings'));
 

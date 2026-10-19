@@ -762,6 +762,16 @@ FocusScope {
                     { btn: "B",     key: "Esc",   act: qsTr("Close"),  kind: "back" }
                 ]
             }
+            // Typing in the field: letters type, so only what the field itself does. Settings
+            // keeps the pad's Y, but no key — S would type an s.
+            if (page && page.searchTyping) {
+                return [
+                    { btn: "A", key: "Enter", act: qsTr("Results"),  kind: "oskDone" },
+                    { btn: "Y", key: "",      act: qsTr("Settings"), kind: "settings" },
+                    { btn: "B", key: "Esc",
+                      act: page.searchHasText ? qsTr("Clear") : qsTr("Close search"), kind: "back" }
+                ]
+            }
             var h = [
                 { btn: "Y",  key: "S",    act: qsTr("Settings"), kind: "settings" },
                 { btn: "B",  key: "Esc",
