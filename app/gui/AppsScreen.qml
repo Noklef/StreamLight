@@ -461,6 +461,12 @@ FocusScope {
     readonly property bool searching: libraryTab === "search"
     // The on-screen keyboard is up (controller typing). Only ever while searching.
     property bool searchKeyboardOpen: false
+    // False until plan step 4 lands a keyboard: the ⌨ button is not drawn without one.
+    readonly property bool searchKeyboardAvailable: false
+    // Typing in the field: the status bar names the field's keys, not the selected entry's,
+    // which would type letters here (G, S, V, P).
+    readonly property bool searchTyping: searching && searchField.activeFocus
+    readonly property bool searchHasText: searchField.text.length > 0
     // Where B leaves search to.
     property string _tabBeforeSearch: "all"
 
@@ -554,11 +560,16 @@ FocusScope {
     function searchType(text) { searchField.insert(searchField.cursorPosition, text) }
 
     /// B, Escape and the B prompt, through AppShell._goBack(): the keyboard closes first, then
-    /// the search, back to the tab it was opened from. False when there is nothing to undo
-    /// here and B should leave the page.
+    /// the text being typed is cleared, then the search closes, back to the tab it was opened
+    /// from. False when there is nothing to undo here and B should leave the page.
     function backOut() {
         if (searchKeyboardOpen) {
             showResults()
+            return true
+        }
+        // Escape in the field does this itself; this is the clickable B prompt's way there.
+        if (searchTyping && searchField.text.length > 0) {
+            searchField.clear()
             return true
         }
         if (searching) {
@@ -1575,7 +1586,8 @@ FocusScope {
             leftPadding: appsRoot._px(44)
             rightPadding: searchTools.width + appsRoot._px(12)
             maximumLength: 40
-            placeholderText: qsTr("Search this library")
+            // No placeholderText: the Material style floats it onto the top border once the
+            // field has focus, and this background leaves no gap there. Drawn below instead.
             color: Theme.text
             selectionColor: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.30)
             selectedTextColor: Theme.text
@@ -1611,8 +1623,31 @@ FocusScope {
                     else appsRoot.exitSearch(appsRoot._tabBeforeSearch, true, false)
                     event.accepted = true
                     break
+                // Start is Done, as on the on-screen keyboard.
+                case Qt.Key_F18:
+                    searchDebounce.stop()
+                    appsRoot._applyQuery()
+                    appsRoot.showResults()
+                    event.accepted = true
+                    break
+                // Select (per-game settings) and the right stick (move) act on the selected
+                // entry, which is not where the user is looking while they type.
+                case Qt.Key_F13:
+                case Qt.Key_F19:
+                    event.accepted = true
+                    break
                 }
             }
+        }
+
+        Label {
+            anchors.left: parent.left
+            anchors.leftMargin: searchField.leftPadding
+            anchors.verticalCenter: parent.verticalCenter
+            visible: searchField.text.length === 0 && searchField.preeditText.length === 0
+            text: qsTr("Search this library")
+            color: appsRoot._text3
+            font: searchField.font
         }
 
         Image {
@@ -1650,7 +1685,8 @@ FocusScope {
             Repeater {
                 model: [
                     { glyph: "×", tip: qsTr("Clear"), shown: searchField.text.length > 0 },
-                    { glyph: "⌨", tip: qsTr("On-screen keyboard"), shown: !appsRoot.searchKeyboardOpen }
+                    { glyph: "⌨", tip: qsTr("On-screen keyboard"),
+                      shown: appsRoot.searchKeyboardAvailable && !appsRoot.searchKeyboardOpen }
                 ]
                 delegate: Rectangle {
                     visible: modelData.shown
