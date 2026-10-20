@@ -2,6 +2,7 @@ import QtQuick 2.12
 import QtQuick.Controls 2.2
 import QtQuick.Controls.Material 2.2
 import QtQuick.Window 2.2
+import QtQuick.VirtualKeyboard
 
 import AppModel 1.0
 import Theme 1.0
@@ -444,8 +445,8 @@ FocusScope {
     readonly property bool searching: libraryTab === "search"
     // The on-screen keyboard is up (controller typing). Only ever while searching.
     property bool searchKeyboardOpen: false
-    // False until plan step 4 lands a keyboard: the ⌨ button is not drawn without one.
-    readonly property bool searchKeyboardAvailable: false
+    // Qt Virtual Keyboard is in the build (plan step 4b): the ⌨ button is drawn.
+    readonly property bool searchKeyboardAvailable: true
     // Typing in the field: the status bar names the field's keys, not the selected entry's,
     // which would type letters here (G, S, V, P).
     readonly property bool searchTyping: searching && searchField.activeFocus
@@ -509,10 +510,43 @@ FocusScope {
         appsRoot._playtimeEpoch++
     }
 
-    // The on-screen keyboard is plan step 4, decided by the Qt Virtual Keyboard spike. Until it
-    // lands the pad gets the field, and searchKeyboardOpen stays false.
-    function openKeyboard() { searchField.forceActiveFocus() }
-    function closeKeyboard() { searchKeyboardOpen = false }
+    /*
+     * The on-screen keyboard is Qt Virtual Keyboard (QT_IM_MODULE, set in main.cpp), drawn by
+     * the InputPanel in searchKeyboardDock. searchKeyboardOpen is the one switch: these two
+     * keep Qt's input method in step with it.
+     *
+     * ⚠️ hide() matters as much as show(). While the input method is shown it takes the arrows
+     * and Return for its own key cursor, drawn or not, and a field anywhere else in the app
+     * would ask for it on a click — main.qml hides it again unless the focused item says it
+     * wants it (wantsOnScreenKeyboard, on searchField).
+     */
+    function openKeyboard() {
+        searchKeyboardOpen = true
+        searchField.forceActiveFocus()
+        Qt.inputMethod.show()
+    }
+    function closeKeyboard() {
+        searchKeyboardOpen = false
+        Qt.inputMethod.hide()
+    }
+
+    // The pad's keyboard, for the pad only: a key on the physical keyboard closes it and the
+    // typing carries on in the field; the pad back in the field opens it again.
+    Connections {
+        target: InputHints
+        function onPadActiveChanged() {
+            if (!InputHints.padActive && appsRoot.searchKeyboardOpen) appsRoot.closeKeyboard()
+            else if (InputHints.padActive && appsRoot.searchTyping && !appsRoot.searchKeyboardOpen)
+                appsRoot.openKeyboard()
+        }
+    }
+    // Closed from the keyboard itself (its hide key): the page follows.
+    Connections {
+        target: Qt.inputMethod
+        function onVisibleChanged() {
+            if (!Qt.inputMethod.visible && appsRoot.searchKeyboardOpen) appsRoot.searchKeyboardOpen = false
+        }
+    }
 
     /// Back into the search from the results: the keyboard with the pad, the field otherwise.
     function focusSearch() {
@@ -1576,10 +1610,40 @@ FocusScope {
                 border.width: searchField.activeFocus ? 2 : 1
             }
             Accessible.name: qsTr("Search")
+            // Read by main.qml's guard: the only field the on-screen keyboard may stay up for.
+            readonly property bool wantsOnScreenKeyboard: appsRoot.searchKeyboardOpen
 
             onTextChanged: if (appsRoot.searching) searchDebounce.restart()
+            // A click on a cover, or any other way out: the keyboard goes with the focus.
+            onActiveFocusChanged: if (!activeFocus && appsRoot.searchKeyboardOpen) appsRoot.closeKeyboard()
 
+            /*
+             * While the keyboard is up, Qt's input context sees the arrows and Return (pad A)
+             * first and moves its own key cursor; what reaches here is the rest of the pad.
+             */
             Keys.onPressed: function(event) {
+                const open = appsRoot.searchKeyboardOpen
+                switch (event.key) {
+                case Qt.Key_Menu:       // X: delete
+                    appsRoot.searchBackspace()
+                    event.accepted = true
+                    return
+                case Qt.Key_Hangup:     // Y: space. Accepted, or main.qml opens Settings.
+                    appsRoot.searchType(" ")
+                    event.accepted = true
+                    return
+                case Qt.Key_Escape:     // B: the keyboard first, the query kept
+                    if (!open) break
+                    appsRoot.showResults()
+                    event.accepted = true
+                    return
+                // The triggers (profile) and the left stick (layout) do nothing while it is up.
+                case Qt.Key_F14:
+                case Qt.Key_F15:
+                case Qt.Key_F20:
+                    event.accepted = open
+                    return
+                }
                 switch (event.key) {
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
@@ -1699,15 +1763,30 @@ FocusScope {
 
     // The on-screen keyboard's place (plan step 4): over the status bar's line, under the
     // library column in List and centred under the grid in Grid. The views end above it.
+    //
+    // It slides up out of that line: the dock grows from nothing to the keyboard's height with
+    // the keyboard pinned to its top, and clips what is not out yet. The views end on the
+    // dock's top, so they make room as it rises rather than jumping.
     Item {
         id: searchKeyboardDock
-        visible: appsRoot.searchKeyboardOpen
         anchors.bottom: parent.bottom
         anchors.bottomMargin: appsRoot._px(58)
         x: appsRoot.gridLayout ? Math.round((appsRoot.width - width) / 2) : appsRoot._sideMargin
         width: appsRoot.gridLayout ? Math.min(appsRoot.width - appsRoot._sideMargin * 2, appsRoot._px(760))
                                    : appsRoot._libraryWidth
-        height: visible ? childrenRect.height : 0
+        height: appsRoot.searchKeyboardOpen ? searchKeyboard.height : 0
+        visible: height > 0
+        clip: true
+        Behavior on height {
+            enabled: !Theme.reduceAnimations
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+
+        InputPanel {
+            id: searchKeyboard
+            anchors.top: parent.top
+            width: parent.width
+        }
     }
 
     // The right stick scrolls this view (7.0.0) — see PadScroll.
@@ -1721,10 +1800,10 @@ FocusScope {
         // searching, and above the on-screen keyboard while it is up.
         anchors.top: appsRoot.searching ? searchBar.bottom : libraryTabs.bottom
         anchors.left: parent.left
-        anchors.bottom: appsRoot.searchKeyboardOpen ? searchKeyboardDock.top : parent.bottom
+        anchors.bottom: searchKeyboardDock.top
         anchors.topMargin: appsRoot._px(8)
         anchors.leftMargin: appsRoot._sideMargin
-        anchors.bottomMargin: appsRoot.searchKeyboardOpen ? appsRoot._px(8) : appsRoot._px(58)
+        anchors.bottomMargin: Math.min(appsRoot._px(8), searchKeyboardDock.height)
         width: appsRoot._libraryWidth
 
         // The list runs the full height of the page now, which is where the extra titles
@@ -2026,11 +2105,11 @@ FocusScope {
         anchors.top: appsRoot.searching ? searchBar.bottom : libraryTabs.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: appsRoot.searchKeyboardOpen ? searchKeyboardDock.top : parent.bottom
+        anchors.bottom: searchKeyboardDock.top
         anchors.topMargin: appsRoot._px(8)
         anchors.leftMargin: appsRoot._sideMargin - appsRoot._px(10)
         anchors.rightMargin: appsRoot._sideMargin - appsRoot._px(10)
-        anchors.bottomMargin: appsRoot.searchKeyboardOpen ? appsRoot._px(8) : appsRoot._px(58)
+        anchors.bottomMargin: Math.min(appsRoot._px(8), searchKeyboardDock.height)
         visible: appsRoot.gridLayout
         enabled: visible
         focus: appsRoot.gridLayout

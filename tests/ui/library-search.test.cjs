@@ -293,6 +293,27 @@ test('the search field: Enter and Down apply now and go to the results, Escape c
     assert.equal(f.globals.libraryTab, 'games');
 });
 
+test('with the keyboard up: X deletes, Y spaces, B closes it, and the triggers and LS do nothing', () => {
+    const f = searchFixture({ tab: 'games', padActive: true });
+    f.globals.setLibraryTab('search', true);
+    const handler = page.keyHandler('onPressed', f.globals, { after: 'id: searchField' });
+    const press = (key) => { const e = { key, accepted: false }; handler(e); return e.accepted; };
+
+    f.globals.searchType('halo');
+    assert.equal(press('Key_Menu'), true);
+    assert.equal(f.field.text, 'hal');
+    assert.equal(press('Key_Hangup'), true, 'accepted, or Settings opens');
+    assert.equal(f.field.text, 'hal ');
+    for (const key of ['Key_F14', 'Key_F15', 'Key_F20']) assert.equal(press(key), true, key);
+    for (const key of ['Key_F16', 'Key_F17']) assert.equal(press(key), false, `${key} still switches tabs`);
+
+    assert.equal(press('Key_Escape'), true);
+    assert.equal(f.globals.searchKeyboardOpen, false);
+    assert.equal(f.field.text, 'hal ', 'the query is kept');
+    assert.equal(f.globals.searching, true);
+    for (const key of ['Key_F14', 'Key_F15', 'Key_F20']) assert.equal(press(key), false, `${key} once it is down`);
+});
+
 test('Up from the top row goes back to the search, only while searching', () => {
     const g = {
         calls: [], count: 5, currentIndex: 0, columns: 4,

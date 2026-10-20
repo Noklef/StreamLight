@@ -38,6 +38,106 @@ jobs:
         with:
           arch: x64
 
+      - name: Restore Qt Virtual Keyboard
+        id: vkb-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vkb-install
+          key: qtvirtualkeyboard-6.8.3-win64_msvc2022_64-arrowkeys-v1
+
+      - name: Build Qt Virtual Keyboard with arrow-key navigation
+        if: steps.vkb-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qtRoot = Split-Path (Split-Path (Get-Command qmake.exe).Source)
+          $src = Join-Path $env:RUNNER_TEMP 'qtvirtualkeyboard'
+          $build = Join-Path $env:RUNNER_TEMP 'vkb-build'
+          $install = Join-Path $env:RUNNER_TEMP 'vkb-install'
+          $log = Join-Path $env:RUNNER_TEMP 'vkb-build.log'
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+
+          # Job logs need a login to read through the API; annotations do not. A failure posts
+          # the tail of the log as one.
+          function Invoke-Logged([string]$what, [scriptblock]$cmd) {
+            & $cmd *>&1 | Tee-Object -FilePath $log -Append | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              $tail = (Get-Content $log -Tail 40) -join "`n"
+              $tail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Qt Virtual Keyboard $what failed::$tail"
+              throw "$what failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            Invoke-Logged 'Ninja install' { choco install ninja -y --no-progress }
+          }
+          Invoke-Logged 'Clone' { git clone --quiet --depth 1 --branch v6.8.3 https://github.com/qt/qtvirtualkeyboard.git $src }
+
+          # A quoted '--' so PowerShell hands it on rather than reading it itself. The .bat file
+          # takes the line whole (%*), so '=' inside the -D options is safe. The last argument
+          # must not end in a digit: the script echoes the line with '>' straight after it.
+          $configureArgs = @(
+            $src
+            '--'
+            '-DCMAKE_BUILD_TYPE=Release'
+            '-DQT_BUILD_EXAMPLES=OFF'
+            '-DQT_BUILD_TESTS=OFF'
+            '-DFEATURE_vkb_arrow_keynavigation=ON'
+            '-DFEATURE_hunspell=OFF'
+            '-DFEATURE_openwnn=OFF'
+            '-DFEATURE_pinyin=OFF'
+            '-DFEATURE_tcime=OFF'
+            '-DFEATURE_zhuyin=OFF'
+            '-DFEATURE_cangjie=OFF'
+            '-DFEATURE_hangul=OFF'
+            '-DFEATURE_thai=OFF'
+          )
+          New-Item -ItemType Directory -Force -Path $build | Out-Null
+          Push-Location $build
+          try {
+            Invoke-Logged 'Configure' { & (Join-Path $qtRoot 'bin\qt-configure-module.bat') @configureArgs }
+
+            # Qt's own binaries may be multi-config (release and debug); build one release flavour.
+            $types = (Select-String -Path CMakeCache.txt -Pattern '^CMAKE_CONFIGURATION_TYPES:\w+=(.*)$').Matches |
+                     ForEach-Object { $_.Groups[1].Value }
+            $configs = if ($types) { $types -split ';' } else { @() }
+            $config = if (-not $configs) { 'Release' }
+                      elseif ($configs -contains 'Release') { 'Release' }
+                      else { ($configs | Where-Object { $_ -ne 'Debug' } | Select-Object -First 1) }
+            Invoke-Logged 'Build' { cmake --build . --parallel --config $config }
+            Invoke-Logged 'Install' { cmake --install . --config $config --prefix $install }
+          }
+          finally {
+            Pop-Location
+          }
+
+          $keynav = (Select-String -Path $log -Pattern 'Key navigation.*' | Select-Object -First 1).Matches.Value
+          $minutes = [math]::Round($timer.Elapsed.TotalMinutes, 1)
+          Write-Output "::notice title=Qt Virtual Keyboard built::$minutes min uncached, config '$config'. $keynav"
+
+      - name: Add Qt Virtual Keyboard to Qt
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qtRoot = Split-Path (Split-Path (Get-Command qmake.exe).Source)
+          $install = Join-Path $env:RUNNER_TEMP 'vkb-install'
+          robocopy $install $qtRoot /E /NFL /NDL /NJH /NJS /NP | Out-Host
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
+
+          # The configure log's summary is not reliably there to read (and not at all on a cache
+          # hit), so ask the installed headers whether arrow-key navigation was built in.
+          $headers = Get-ChildItem (Join-Path $qtRoot 'include\QtVirtualKeyboard') -Recurse -Filter '*config*.h'
+          $lines = @($headers | Select-String -Pattern 'vkb_arrow_keynavigation|ARROW_KEY_NAVIGATION' |
+                     ForEach-Object { "$($_.Filename) $($_.Line.Trim())" })
+          if (-not ($lines -match 'QT_FEATURE_vkb_arrow_keynavigation\s+1\b')) {
+            $found = if ($lines.Count) { $lines -join '%0A' } else { "nothing in $($headers.Name -join ', ')" }
+            Write-Output "::error title=Qt Virtual Keyboard built without arrow-key navigation::$found"
+            exit 1
+          }
+          Write-Output "::notice title=Qt Virtual Keyboard arrow-key navigation::$($lines -join '%0A')"
+          exit 0
+
       - name: Test library search matching
         shell: pwsh
         run: |
@@ -139,6 +239,33 @@ jobs:
               Remove-Item -LiteralPath $path -Recurse -Force
             }
           }
+
+      - name: Check Qt Virtual Keyboard was packaged
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'build\StreamLight-portable-x64'
+          $need = @(
+            'Qt6VirtualKeyboard.dll'
+            'platforminputcontexts\qtvirtualkeyboardplugin.dll'
+            'qml\QtQuick\VirtualKeyboard'
+          )
+          $missing = @($need | Where-Object { -not (Test-Path (Join-Path $out $_)) })
+
+          $total = (Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum
+          $vkbFiles = @(Get-ChildItem $out -File -Filter 'Qt6VirtualKeyboard*.dll') +
+                      @(Get-ChildItem (Join-Path $out 'platforminputcontexts') -File -Filter 'qtvirtualkeyboard*' -ErrorAction SilentlyContinue) +
+                      @(Get-ChildItem (Join-Path $out 'qml\QtQuick\VirtualKeyboard') -Recurse -File -ErrorAction SilentlyContinue)
+          $vkb = ($vkbFiles | Measure-Object Length -Sum).Sum
+          $mb = { param($b) [math]::Round($b / 1MB, 1) }
+          $dlls = (Get-ChildItem $out -File -Filter 'Qt6VirtualKeyboard*.dll').Name -join ', '
+          $ctx = (Get-ChildItem (Join-Path $out 'platforminputcontexts') -File -ErrorAction SilentlyContinue).Name -join ', '
+
+          if ($missing.Count -gt 0) {
+            Write-Output "::error title=Qt Virtual Keyboard not packaged::Missing: $($missing -join ', '). DLLs: $dlls. Input contexts: $ctx"
+            exit 1
+          }
+          Write-Output "::notice title=Package size::$(& $mb $total) MB in total, of which Qt Virtual Keyboard is $(& $mb $vkb) MB. DLLs: $dlls. Input contexts: $ctx"
 
       - name: Upload runnable build
         uses: actions/upload-artifact@v4

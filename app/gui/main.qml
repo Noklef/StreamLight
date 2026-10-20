@@ -157,6 +157,20 @@ ApplicationWindow {
     title: "StreamLight"
     font.family: Theme.family
 
+    // ── On-screen keyboard (7.1.0) ────────────────────────────────────────────
+    // Qt Virtual Keyboard is the app's input method (main.cpp), so any text field asks for it
+    // when clicked. Only the library search, with a controller, keeps it: a focused item says
+    // so with wantsOnScreenKeyboard. Everywhere else it goes straight away — shown, it would
+    // take the arrows and Return for its own key cursor.
+    Connections {
+        target: Qt.inputMethod
+        function onVisibleChanged() {
+            var item = window.activeFocusItem
+            if (Qt.inputMethod.visible && !(item && item.wantsOnScreenKeyboard === true))
+                Qt.inputMethod.hide()
+        }
+    }
+
     // ── Embedded UI fonts (matches StreamTweak) ───────────────────────────────
     FontLoader { source: "qrc:/res/fonts/DMSans-Regular.ttf" }
     FontLoader { source: "qrc:/res/fonts/DMSans-Medium.ttf" }

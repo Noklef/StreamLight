@@ -758,6 +758,19 @@ int main(int argc, char *argv[])
     qputenv("QSG_RENDER_LOOP", "basic");
 #endif
 
+#ifdef Q_OS_WIN32
+    // Qt Virtual Keyboard, for typing in the library search with a controller (7.1.0). Drawn
+    // inside our window by the host page's InputPanel, not as a desktop window of its own, and
+    // only ever kept up for that field (main.qml). A user's own QT_IM_MODULE wins.
+    //
+    // ⚠️ It replaces the Windows input method in every field, so an IME (Japanese, Chinese,
+    // Korean) composes nothing in this app's fields.
+    if (!qEnvironmentVariableIsSet("QT_IM_MODULE")) {
+        qputenv("QT_IM_MODULE", "qtvirtualkeyboard");
+    }
+    qputenv("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "1");
+#endif
+
 #if defined(Q_OS_DARWIN) && defined(QT_DEBUG)
     // Enable Metal valiation for debug builds
     qputenv("MTL_DEBUG_LAYER", "1");
