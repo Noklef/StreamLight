@@ -249,6 +249,8 @@ jobs:
             'Qt6VirtualKeyboard.dll'
             'platforminputcontexts\qtvirtualkeyboardplugin.dll'
             'qml\QtQuick\VirtualKeyboard'
+            # Our keyboard style (app/gui/vkbstyle/style.qml) is built on this module.
+            'qml\QtQuick\VirtualKeyboard\Styles'
           )
           $missing = @($need | Where-Object { -not (Test-Path (Join-Path $out $_)) })
 

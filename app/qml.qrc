@@ -65,4 +65,25 @@
         <file>gui/GamepadCaptureDialog.qml</file>
         <file>gui/SteamLayoutBanner.qml</file>
     </qresource>
+    <!-- The on-screen keyboard style (gui/vkbstyle/style.qml): Qt Virtual Keyboard finds a
+         style by name under this prefix. -->
+    <qresource prefix="/QtQuick/VirtualKeyboard/content/styles/streamlight">
+        <file alias="style.qml">gui/vkbstyle/style.qml</file>
+        <file alias="images/backspace.svg">gui/vkbstyle/images/backspace.svg</file>
+        <file alias="images/backspace_dark.svg">gui/vkbstyle/images/backspace_dark.svg</file>
+        <file alias="images/check.svg">gui/vkbstyle/images/check.svg</file>
+        <file alias="images/check_dark.svg">gui/vkbstyle/images/check_dark.svg</file>
+        <file alias="images/enter.svg">gui/vkbstyle/images/enter.svg</file>
+        <file alias="images/enter_dark.svg">gui/vkbstyle/images/enter_dark.svg</file>
+        <file alias="images/globe.svg">gui/vkbstyle/images/globe.svg</file>
+        <file alias="images/globe_dark.svg">gui/vkbstyle/images/globe_dark.svg</file>
+        <file alias="images/hidekeyboard.svg">gui/vkbstyle/images/hidekeyboard.svg</file>
+        <file alias="images/hidekeyboard_dark.svg">gui/vkbstyle/images/hidekeyboard_dark.svg</file>
+        <file alias="images/search.svg">gui/vkbstyle/images/search.svg</file>
+        <file alias="images/search_dark.svg">gui/vkbstyle/images/search_dark.svg</file>
+        <file alias="images/settings.svg">gui/vkbstyle/images/settings.svg</file>
+        <file alias="images/settings_dark.svg">gui/vkbstyle/images/settings_dark.svg</file>
+        <file alias="images/shift.svg">gui/vkbstyle/images/shift.svg</file>
+        <file alias="images/shift_dark.svg">gui/vkbstyle/images/shift_dark.svg</file>
+    </qresource>
 </RCC>

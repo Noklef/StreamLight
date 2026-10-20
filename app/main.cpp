@@ -769,6 +769,10 @@ int main(int argc, char *argv[])
         qputenv("QT_IM_MODULE", "qtvirtualkeyboard");
     }
     qputenv("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "1");
+    // Our look rather than Qt's: gui/vkbstyle/style.qml, which follows Theme.
+    if (!qEnvironmentVariableIsSet("QT_VIRTUALKEYBOARD_STYLE")) {
+        qputenv("QT_VIRTUALKEYBOARD_STYLE", "streamlight");
+    }
 #endif
 
 #if defined(Q_OS_DARWIN) && defined(QT_DEBUG)

@@ -399,6 +399,9 @@ FocusScope {
         case "oskType":
             SdlGamepadKeyNavigation.simulateKey(Qt.Key_Return)
             break
+        case "oskOpen":
+            if (appsLoader.item) appsLoader.item.openKeyboard()
+            break
         case "oskDelete":
             if (appsLoader.item) appsLoader.item.searchBackspace()
             break
@@ -749,7 +752,8 @@ FocusScope {
         //
         // Library search: while its on-screen keyboard is up, the buttons type, so the bar
         // names nothing else (Y is Space there, not Settings). Searching without it, B closes
-        // the search rather than leaving for the hosts, and the bar says so.
+        // the search rather than leaving for the hosts, and the bar says so. In the field with
+        // the pad, A opens the keyboard and Start goes to the results.
         readonly property var _hintsApps: {
             var page = appsLoader.item
             if (page && page.searchKeyboardOpen) {
@@ -765,12 +769,15 @@ FocusScope {
             // Typing in the field: letters type, so only what the field itself does. Settings
             // keeps the pad's Y, but no key — S would type an s.
             if (page && page.searchTyping) {
-                return [
-                    { btn: "A", key: "Enter", act: qsTr("Results"),  kind: "oskDone" },
+                var typing = InputHints.padActive && page.searchKeyboardAvailable
+                    ? [ { btn: "A",     key: "Enter", act: qsTr("Keyboard"), kind: "oskOpen" },
+                        { btn: "START", key: "",      act: qsTr("Results"),  kind: "oskDone" } ]
+                    : [ { btn: "A",     key: "Enter", act: qsTr("Results"),  kind: "oskDone" } ]
+                return typing.concat([
                     { btn: "Y", key: "",      act: qsTr("Settings"), kind: "settings" },
                     { btn: "B", key: "Esc",
                       act: page.searchHasText ? qsTr("Clear") : qsTr("Close search"), kind: "back" }
-                ]
+                ])
             }
             var h = [
                 { btn: "Y",  key: "S",    act: qsTr("Settings"), kind: "settings" },

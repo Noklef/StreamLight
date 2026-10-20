@@ -398,7 +398,7 @@ FocusScope {
         // Search is a stop on the ring, not a tab: it is never saved, and it keeps state of its
         // own that a plain switch would leave behind (see enterSearch / exitSearch).
         if (tab === "search") {
-            if (!searching) enterSearch(InputHints.padActive)
+            if (!searching) enterSearch(false)
             return
         }
         if (searching) {
@@ -531,13 +531,11 @@ FocusScope {
     }
 
     // The pad's keyboard, for the pad only: a key on the physical keyboard closes it and the
-    // typing carries on in the field; the pad back in the field opens it again.
+    // typing carries on in the field. A in the field opens it again.
     Connections {
         target: InputHints
         function onPadActiveChanged() {
             if (!InputHints.padActive && appsRoot.searchKeyboardOpen) appsRoot.closeKeyboard()
-            else if (InputHints.padActive && appsRoot.searchTyping && !appsRoot.searchKeyboardOpen)
-                appsRoot.openKeyboard()
         }
     }
     // Closed from the keyboard itself (its hide key): the page follows.
@@ -548,13 +546,11 @@ FocusScope {
         }
     }
 
-    /// Back into the search from the results: the keyboard with the pad, the field otherwise.
+    /// Back into the search from the results. The field, with the pad too: A there opens the
+    /// keyboard, so walking up through the search bar never covers the results with it.
     function focusSearch() {
-        if (InputHints.padActive) openKeyboard()
-        else {
-            closeKeyboard()
-            searchField.forceActiveFocus()
-        }
+        closeKeyboard()
+        searchField.forceActiveFocus()
     }
 
     /// From the search to the results — Down or Enter in the field, Start or Done on the
@@ -1628,7 +1624,8 @@ FocusScope {
                     appsRoot.searchBackspace()
                     event.accepted = true
                     return
-                case Qt.Key_Hangup:     // Y: space. Accepted, or main.qml opens Settings.
+                case Qt.Key_Hangup:     // Y: space on the keyboard. Accepted, or main.qml
+                    if (!open) break    // opens Settings — as it does with the keyboard down.
                     appsRoot.searchType(" ")
                     event.accepted = true
                     return
@@ -1647,6 +1644,14 @@ FocusScope {
                 switch (event.key) {
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
+                    // A on the pad: the keyboard. Enter on a keyboard, or the on-screen
+                    // keyboard's own Enter key once it is up: the results.
+                    if (!open && InputHints.padActive && appsRoot.searchKeyboardAvailable) {
+                        appsRoot.openKeyboard()
+                        event.accepted = true
+                        break
+                    }
+                    // fall through
                 case Qt.Key_Down:
                     // Whatever was typed last applies now, not after the debounce.
                     searchDebounce.stop()
@@ -1762,13 +1767,16 @@ FocusScope {
     }
 
     // The on-screen keyboard's place (plan step 4): over the status bar's line, under the
-    // library column in List and centred under the grid in Grid. The views end above it.
+    // library column in List and centred under the grid in Grid. It draws over the views
+    // rather than shrinking them, so the results don't jump as it comes and goes; the field
+    // has the focus while it is up, and the results are back in full as soon as it closes.
     //
     // It slides up out of that line: the dock grows from nothing to the keyboard's height with
-    // the keyboard pinned to its top, and clips what is not out yet. The views end on the
-    // dock's top, so they make room as it rises rather than jumping.
+    // the keyboard pinned to its top, and clips what is not out yet.
     Item {
         id: searchKeyboardDock
+        // Over the list, the grid and the spotlight, which are declared after it.
+        z: 10
         anchors.bottom: parent.bottom
         anchors.bottomMargin: appsRoot._px(58)
         x: appsRoot.gridLayout ? Math.round((appsRoot.width - width) / 2) : appsRoot._sideMargin
@@ -1797,13 +1805,13 @@ FocusScope {
         enabled: visible
         // Straight under the tabs: the column's caption is the list's own first section
         // header, which scrolls away with the rows it names. Under the search bar while
-        // searching, and above the on-screen keyboard while it is up.
+        // searching.
         anchors.top: appsRoot.searching ? searchBar.bottom : libraryTabs.bottom
         anchors.left: parent.left
-        anchors.bottom: searchKeyboardDock.top
+        anchors.bottom: parent.bottom
         anchors.topMargin: appsRoot._px(8)
         anchors.leftMargin: appsRoot._sideMargin
-        anchors.bottomMargin: Math.min(appsRoot._px(8), searchKeyboardDock.height)
+        anchors.bottomMargin: appsRoot._px(58)
         width: appsRoot._libraryWidth
 
         // The list runs the full height of the page now, which is where the extra titles
@@ -2105,11 +2113,11 @@ FocusScope {
         anchors.top: appsRoot.searching ? searchBar.bottom : libraryTabs.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: searchKeyboardDock.top
+        anchors.bottom: parent.bottom
         anchors.topMargin: appsRoot._px(8)
         anchors.leftMargin: appsRoot._sideMargin - appsRoot._px(10)
         anchors.rightMargin: appsRoot._sideMargin - appsRoot._px(10)
-        anchors.bottomMargin: Math.min(appsRoot._px(8), searchKeyboardDock.height)
+        anchors.bottomMargin: appsRoot._px(58)
         visible: appsRoot.gridLayout
         enabled: visible
         focus: appsRoot.gridLayout
