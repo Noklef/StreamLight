@@ -24,9 +24,15 @@ the functions, key handlers and bindings out of the QML files.
 They do not validate QML loading, rendering or physical controller input.
 
 What a search matches is C++ (`app/backend/librarysearch.h`), tested by
-`tests/library/tst_searchmatch.cpp`. The Windows workflow has no test steps
-(8.0.0), so run it by hand from an empty folder in a Visual Studio x64 prompt
-with Qt's `bin` on the PATH (`check` builds it and runs it):
+`tests/library/tst_searchmatch.cpp`.
+
+On every push, `.github/workflows/build-windows-portable.yml` runs both sets of
+tests, then builds a portable StreamLight and uploads it as the
+`StreamLight-windows-x64-<sha>` artifact. (`build-windows.yml` is the release
+build with the installer and signing; it runs by hand and has no test steps.)
+
+To run the matcher test locally, from an empty folder in a Visual Studio x64
+prompt with Qt's `bin` on the PATH (`check` builds it and runs it):
 
 ```powershell
 qmake <repo>\tests\library\searchmatch.pro CONFIG+=release
