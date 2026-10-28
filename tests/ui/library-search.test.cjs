@@ -407,7 +407,7 @@ test('the status bar: keyboard prompts while it is up, Close search while search
     assert.equal(hints({ ...base, searching: true, searchKeyboardOpen: true }).length, 0);
 
     // Typing in the field, in Grid with a cover selected: none of the cover's prompts, whose
-    // keys would type letters.
+    // keys would type letters. Nor Settings, which has no key here: no lone Y glyph.
     const grid = { ...base, gridLayout: true, focusedAppName: 'Halo', focusedVerb: 'Play',
                    focusedAppIsRunning: true, focusedPinnable: true, focusedPinned: false };
     for (const [searchHasText, b] of [[true, 'Clear'], [false, 'Close search']]) {
@@ -415,8 +415,8 @@ test('the status bar: keyboard prompts while it is up, Close search while search
                                searchKeyboardOpen: false });
         // Array.from: the bar's array comes from the vm context, and so would a .map() of it.
         assert.deepEqual(Array.from(typing, (h) => [h.btn, h.key, h.kind]),
-                         [['A', 'Enter', 'oskDone'], ['Y', '', 'settings'], ['B', 'Esc', 'back']]);
-        assert.equal(typing[2].act, b);
+                         [['A', 'Enter', 'oskDone'], ['B', 'Esc', 'back']]);
+        assert.equal(typing[1].act, b);
     }
     // With the pad, A is the keyboard and Start the results.
     const padTyping = hints({ ...grid, searching: true, searchTyping: true, searchHasText: true,

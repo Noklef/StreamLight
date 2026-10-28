@@ -843,14 +843,15 @@ FocusScope {
             var page = appsLoader.item
             if (page && page.searchKeyboardOpen) return []
             // Typing in the field: letters type, so only what the field itself does. Settings
-            // keeps the pad's Y, but no key — S would type an s.
+            // keeps the pad's Y, but has no key (S would type an s), so a keyboard user gets no
+            // prompt for it rather than a lone Y glyph among key caps.
             if (page && page.searchTyping) {
                 var typing = InputHints.padActive
                     ? [ { btn: "A",     key: "Enter", act: qsTr("Keyboard"), kind: "oskOpen" },
-                        { btn: "START", key: "",      act: qsTr("Results"),  kind: "oskDone" } ]
+                        { btn: "START", key: "",      act: qsTr("Results"),  kind: "oskDone" },
+                        { btn: "Y",     key: "",      act: qsTr("Settings"), kind: "settings" } ]
                     : [ { btn: "A",     key: "Enter", act: qsTr("Results"),  kind: "oskDone" } ]
                 return typing.concat([
-                    { btn: "Y", key: "",      act: qsTr("Settings"), kind: "settings" },
                     { btn: "B", key: "Esc",
                       act: page.searchHasText ? qsTr("Clear") : qsTr("Close search"), kind: "back" }
                 ])
