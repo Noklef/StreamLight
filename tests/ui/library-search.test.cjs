@@ -128,6 +128,46 @@ test('entering search shows ALL from the first row, in the field, with the keybo
     assert.equal(empty.view.currentIndex, -1);
 });
 
+test('clicking either shoulder into search keeps the field focused; leaving focuses the library', () => {
+    for (const [tab, button] of [['all', 'LB'], ['apps', 'RB']]) {
+        const f = searchFixture({ tab });
+        const click = page.signalHandler('onTriggered', f.globals, { after: `buttonKey: "${button}"; keyLabel:` });
+        click();
+        assert.equal(f.globals.searching, true, button);
+        assert.equal(f.field.activeFocus, true, `${button}: typing must stay in the search field`);
+        assert.deepEqual(f.calls.at(-1), ['focus', 'field']);
+
+        click();
+        assert.equal(f.globals.searching, false, button);
+        assert.equal(f.field.activeFocus, false);
+        assert.deepEqual(f.calls.at(-1), ['focus', 'library']);
+    }
+});
+
+test('clicking Results applies pending text before deciding where to focus', () => {
+    for (const [previousCount, nextCount] of [[0, 3], [3, 0]]) {
+        const f = searchFixture({ count: previousCount });
+        f.globals.enterSearch(false);
+        f.model.filterText = 'old query';
+        f.field.text = 'new query';
+        const setFilterText = f.model.setFilterText;
+        f.model.setFilterText = (text) => {
+            const rebuilt = setFilterText(text);
+            f.view.count = nextCount;
+            return rebuilt;
+        };
+        const click = shell.qmlFunction('triggerStatusBarAction', { appsLoader: { item: f.globals } });
+        f.calls.length = 0;
+        click('oskDone');
+
+        assert.equal(f.model.filterText, 'new query');
+        assert.deepEqual(f.calls[0], ['debounce stopped']);
+        assert.equal(f.view.currentIndex, nextCount > 0 ? 0 : -1);
+        assert.equal(f.field.activeFocus, nextCount === 0);
+        assert.deepEqual(f.calls.at(-1), ['focus', nextCount > 0 ? 'library' : 'field']);
+    }
+});
+
 test('a query applies once its words change, and only then resets the cursor', () => {
     const f = searchFixture();
     f.field.text = 'halo';

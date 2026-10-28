@@ -548,6 +548,9 @@ FocusScope {
     /// From the search to the results — Down or Enter in the field, Start or Done on the
     /// keyboard. With nothing to show, the field keeps the focus.
     function showResults() {
+        // Every Results action, including the clickable prompt, uses the latest text.
+        searchDebounce.stop()
+        _applyQuery()
         closeKeyboard()
         if (appGrid.count === 0) {
             searchField.forceActiveFocus()
@@ -1477,7 +1480,10 @@ FocusScope {
             anchors.verticalCenterOffset: -appsRoot._px(5)   // centred on the labels, not the underline
             size: appsRoot._px(26)
             buttonKey: "LB"; keyLabel: "PgUp"
-            onTriggered: { appsRoot.switchLibraryTab(-1); appsRoot.focusLibrary() }
+            onTriggered: {
+                appsRoot.switchLibraryTab(-1)
+                if (!appsRoot.searching) appsRoot.focusLibrary()
+            }
         }
 
         Row {
@@ -1569,7 +1575,10 @@ FocusScope {
             anchors.verticalCenterOffset: -appsRoot._px(5)
             size: appsRoot._px(26)
             buttonKey: "RB"; keyLabel: "PgDn"
-            onTriggered: { appsRoot.switchLibraryTab(1); appsRoot.focusLibrary() }
+            onTriggered: {
+                appsRoot.switchLibraryTab(1)
+                if (!appsRoot.searching) appsRoot.focusLibrary()
+            }
         }
     }
 
@@ -1625,9 +1634,6 @@ FocusScope {
                     if (searchKeyboard.offer(event)) break
                     // fall through
                 case Qt.Key_Down:
-                    // Whatever was typed last applies now, not after the debounce.
-                    searchDebounce.stop()
-                    appsRoot._applyQuery()
                     appsRoot.showResults()
                     event.accepted = true
                     break
@@ -1640,8 +1646,6 @@ FocusScope {
                     break
                 // Start is Done, as on the on-screen keyboard.
                 case Qt.Key_F18:
-                    searchDebounce.stop()
-                    appsRoot._applyQuery()
                     appsRoot.showResults()
                     event.accepted = true
                     break
@@ -1746,8 +1750,6 @@ FocusScope {
         mode: "text"
         onAccepted: {
             close()
-            searchDebounce.stop()
-            appsRoot._applyQuery()
             appsRoot.showResults()
         }
     }
