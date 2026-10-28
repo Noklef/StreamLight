@@ -414,7 +414,7 @@ FocusScope {
         // Search is a stop on the ring, not a tab: it is never saved, and it keeps state of its
         // own that a plain switch would leave behind (see enterSearch / exitSearch).
         if (tab === "search") {
-            if (!searching) enterSearch(InputHints.padActive)
+            if (!searching) enterSearch(false)
             return
         }
         if (searching) {
@@ -460,9 +460,7 @@ FocusScope {
     readonly property var _ring: ["search", "all", "games", "apps"]
     readonly property bool searching: libraryTab === "search"
     // The on-screen keyboard is up (controller typing). Only ever while searching.
-    property bool searchKeyboardOpen: false
-    // False until plan step 4 lands a keyboard: the ⌨ button is not drawn without one.
-    readonly property bool searchKeyboardAvailable: false
+    readonly property bool searchKeyboardOpen: searchKeyboard.visible
     // Typing in the field: the status bar names the field's keys, not the selected entry's,
     // which would type letters here (G, S, V, P).
     readonly property bool searchTyping: searching && searchField.activeFocus
@@ -526,18 +524,25 @@ FocusScope {
         appsRoot._playtimeEpoch++
     }
 
-    // The on-screen keyboard is plan step 4, decided by the Qt Virtual Keyboard spike. Until it
-    // lands the pad gets the field, and searchKeyboardOpen stays false.
-    function openKeyboard() { searchField.forceActiveFocus() }
-    function closeKeyboard() { searchKeyboardOpen = false }
+    /*
+     * The on-screen keyboard is the app's own (VirtualKeyboard.qml, 8.0.0), searchKeyboard
+     * below, as on every other field a pad types into. It is modal: while it is up the focus
+     * and every pad button are its own — A types, X deletes, Y adds a space, LB/RB move the
+     * text cursor, LT shift, RT symbols, Start is Done (the results), B closes it back to the
+     * field. The pad's A in the field opens it (offer(), in the field's keys); so does the ⌨
+     * button, for the mouse.
+     */
+    function openKeyboard() {
+        searchField.forceActiveFocus()
+        searchKeyboard.open()
+    }
+    function closeKeyboard() { searchKeyboard.close() }
 
-    /// Back into the search from the results: the keyboard with the pad, the field otherwise.
+    /// Back into the search from the results. The field, with the pad too: A there opens the
+    /// keyboard, so walking up through the search bar never covers the results with it.
     function focusSearch() {
-        if (InputHints.padActive) openKeyboard()
-        else {
-            closeKeyboard()
-            searchField.forceActiveFocus()
-        }
+        closeKeyboard()
+        searchField.forceActiveFocus()
     }
 
     /// From the search to the results — Down or Enter in the field, Start or Done on the
@@ -552,19 +557,19 @@ FocusScope {
         focusLibrary()
     }
 
-    // The status bar's keyboard prompts (X, Y), for the mouse.
+    // X in the field: delete, as on the keyboard.
     function searchBackspace() {
         var p = searchField.cursorPosition
         if (p > 0) searchField.remove(p - 1, p)
     }
-    function searchType(text) { searchField.insert(searchField.cursorPosition, text) }
 
-    /// B, Escape and the B prompt, through AppShell._goBack(): the keyboard closes first, then
-    /// the text being typed is cleared, then the search closes, back to the tab it was opened
-    /// from. False when there is nothing to undo here and B should leave the page.
+    /// B, Escape and the B prompt, through AppShell._goBack(): the keyboard closes first (back
+    /// to the field, as its own B does), then the text being typed is cleared, then the search
+    /// closes, back to the tab it was opened from. False when there is nothing to undo here and
+    /// B should leave the page.
     function backOut() {
         if (searchKeyboardOpen) {
-            showResults()
+            closeKeyboard()
             return true
         }
         // Escape in the field does this itself; this is the clickable B prompt's way there.
@@ -1605,10 +1610,20 @@ FocusScope {
 
             onTextChanged: if (appsRoot.searching) searchDebounce.restart()
 
+            // The keyboard is modal, so none of these arrive while it is up: they are the field's.
             Keys.onPressed: function(event) {
                 switch (event.key) {
+                // X deletes, as on the keyboard. Y is left to main.qml: Settings.
+                case Qt.Key_Menu:
+                    appsRoot.searchBackspace()
+                    event.accepted = true
+                    break
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
+                    // The pad's A opens the on-screen keyboard (offer() takes only a key the pad
+                    // sent); Enter on a keyboard goes to the results.
+                    if (searchKeyboard.offer(event)) break
+                    // fall through
                 case Qt.Key_Down:
                     // Whatever was typed last applies now, not after the debounce.
                     searchDebounce.stop()
@@ -1685,8 +1700,7 @@ FocusScope {
             Repeater {
                 model: [
                     { glyph: "×", tip: qsTr("Clear"), shown: searchField.text.length > 0 },
-                    { glyph: "⌨", tip: qsTr("On-screen keyboard"),
-                      shown: appsRoot.searchKeyboardAvailable && !appsRoot.searchKeyboardOpen }
+                    { glyph: "⌨", tip: qsTr("On-screen keyboard"), shown: !appsRoot.searchKeyboardOpen }
                 ]
                 delegate: Rectangle {
                     visible: modelData.shown
@@ -1723,17 +1737,19 @@ FocusScope {
         }
     }
 
-    // The on-screen keyboard's place (plan step 4): over the status bar's line, under the
-    // library column in List and centred under the grid in Grid. The views end above it.
-    Item {
-        id: searchKeyboardDock
-        visible: appsRoot.searchKeyboardOpen
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: appsRoot._px(58)
-        x: appsRoot.gridLayout ? Math.round((appsRoot.width - width) / 2) : appsRoot._sideMargin
-        width: appsRoot.gridLayout ? Math.min(appsRoot.width - appsRoot._sideMargin * 2, appsRoot._px(760))
-                                   : appsRoot._libraryWidth
-        height: visible ? childrenRect.height : 0
+    // The library search's on-screen keyboard: the app's own, at the bottom of the window over
+    // the library, which stays where it is. Done (Start) applies what was typed and goes to the
+    // results; B closes it back to the field, the query kept.
+    VirtualKeyboard {
+        id: searchKeyboard
+        target: searchField
+        mode: "text"
+        onAccepted: {
+            close()
+            searchDebounce.stop()
+            appsRoot._applyQuery()
+            appsRoot.showResults()
+        }
     }
 
     // The right stick scrolls this view (7.0.0) — see PadScroll.
@@ -1744,13 +1760,13 @@ FocusScope {
         enabled: visible
         // Straight under the tabs: the column's caption is the list's own first section
         // header, which scrolls away with the rows it names. Under the search bar while
-        // searching, and above the on-screen keyboard while it is up.
+        // searching.
         anchors.top: appsRoot.searching ? searchBar.bottom : libraryTabs.bottom
         anchors.left: parent.left
-        anchors.bottom: appsRoot.searchKeyboardOpen ? searchKeyboardDock.top : parent.bottom
+        anchors.bottom: parent.bottom
         anchors.topMargin: appsRoot._px(8)
         anchors.leftMargin: appsRoot._sideMargin
-        anchors.bottomMargin: appsRoot.searchKeyboardOpen ? appsRoot._px(8) : appsRoot._px(58)
+        anchors.bottomMargin: appsRoot._px(58)
         width: appsRoot._libraryWidth
 
         // The list runs the full height of the page now, which is where the extra titles
@@ -2052,11 +2068,11 @@ FocusScope {
         anchors.top: appsRoot.searching ? searchBar.bottom : libraryTabs.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: appsRoot.searchKeyboardOpen ? searchKeyboardDock.top : parent.bottom
+        anchors.bottom: parent.bottom
         anchors.topMargin: appsRoot._px(8)
         anchors.leftMargin: appsRoot._sideMargin - appsRoot._px(10)
         anchors.rightMargin: appsRoot._sideMargin - appsRoot._px(10)
-        anchors.bottomMargin: appsRoot.searchKeyboardOpen ? appsRoot._px(8) : appsRoot._px(58)
+        anchors.bottomMargin: appsRoot._px(58)
         visible: appsRoot.gridLayout
         enabled: visible
         focus: appsRoot.gridLayout

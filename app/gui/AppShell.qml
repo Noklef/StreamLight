@@ -443,16 +443,9 @@ FocusScope {
         case "stopApp":
             if (appsLoader.item) appsLoader.item.stopFocusedApp()
             break
-        // The library search's on-screen keyboard. A presses the key under its cursor, as the
-        // pad's A would; the rest edit the search field directly.
-        case "oskType":
-            SdlGamepadKeyNavigation.simulateKey(Qt.Key_Return)
-            break
-        case "oskDelete":
-            if (appsLoader.item) appsLoader.item.searchBackspace()
-            break
-        case "oskSpace":
-            if (appsLoader.item) appsLoader.item.searchType(" ")
+        // The library search: open its on-screen keyboard, or go to the results.
+        case "oskOpen":
+            if (appsLoader.item) appsLoader.item.openKeyboard()
             break
         case "oskDone":
             if (appsLoader.item) appsLoader.item.showResults()
@@ -842,30 +835,25 @@ FocusScope {
         // pin, so there the prompt is not drawn at all. The word follows the row: Unpin on a
         // pinned game.
         //
-        // Library search: while its on-screen keyboard is up, the buttons type, so the bar
-        // names nothing else (Y is Space there, not Settings). Searching without it, B closes
-        // the search rather than leaving for the hosts, and the bar says so.
+        // Library search: while its on-screen keyboard is up the bar is empty — the keyboard
+        // names its own buttons under its keys, and has them all. Searching without it, B closes
+        // the search rather than leaving for the hosts, and the bar says so. In the field with
+        // the pad, A opens the keyboard and Start goes to the results.
         readonly property var _hintsApps: {
             var page = appsLoader.item
-            if (page && page.searchKeyboardOpen) {
-                return [
-                    { btn: "A",     key: "Enter", act: qsTr("Type"),   kind: "oskType" },
-                    { btn: "X",     key: "Bksp",  act: qsTr("Delete"), kind: "oskDelete" },
-                    { btn: "Y",     key: "Space", act: qsTr("Space"),  kind: "oskSpace" },
-                    // No key: on a keyboard, Done is Down or Enter in the field, not one key.
-                    { btn: "START", key: "",      act: qsTr("Done"),   kind: "oskDone" },
-                    { btn: "B",     key: "Esc",   act: qsTr("Close"),  kind: "back" }
-                ]
-            }
+            if (page && page.searchKeyboardOpen) return []
             // Typing in the field: letters type, so only what the field itself does. Settings
             // keeps the pad's Y, but no key — S would type an s.
             if (page && page.searchTyping) {
-                return [
-                    { btn: "A", key: "Enter", act: qsTr("Results"),  kind: "oskDone" },
+                var typing = InputHints.padActive
+                    ? [ { btn: "A",     key: "Enter", act: qsTr("Keyboard"), kind: "oskOpen" },
+                        { btn: "START", key: "",      act: qsTr("Results"),  kind: "oskDone" } ]
+                    : [ { btn: "A",     key: "Enter", act: qsTr("Results"),  kind: "oskDone" } ]
+                return typing.concat([
                     { btn: "Y", key: "",      act: qsTr("Settings"), kind: "settings" },
                     { btn: "B", key: "Esc",
                       act: page.searchHasText ? qsTr("Clear") : qsTr("Close search"), kind: "back" }
-                ]
+                ])
             }
             var h = [
                 { btn: "Y",  key: "S",    act: qsTr("Settings"), kind: "settings" },

@@ -56,6 +56,21 @@ function qmlSource(file) {
         return run(block(start, match[1], `Keys.${signal}`), globals);
     }
 
+    /**
+     * A signal handler block, `onName: { ... }`, the first after the text `after`, as a
+     * function of no arguments.
+     */
+    function signalHandler(name, globals, { after = '' } = {}) {
+        const from = source.indexOf(after);
+        assert.ok(from >= 0, `Missing ${after} in ${file}`);
+        const pattern = new RegExp(`^([ \\t]*)${name}: \\{`, 'mg');
+        pattern.lastIndex = from;
+        const match = pattern.exec(source);
+        assert.ok(match, `Missing ${name} after ${after || 'the start'} in ${file}`);
+        const start = match.index + match[0].length - 1;
+        return run(`function () ${block(start, match[1], name)}`, globals);
+    }
+
     /** The page's own key handler: the file's first Keys.onPressed. */
     function pageKeyHandler(globals) {
         return keyHandler('onPressed', globals);
@@ -71,7 +86,7 @@ function qmlSource(file) {
         return run(`function () ${body}`, globals)();
     }
 
-    return { source, qmlFunction, keyHandler, pageKeyHandler, qmlBinding };
+    return { source, qmlFunction, keyHandler, signalHandler, pageKeyHandler, qmlBinding };
 }
 
 module.exports = { qmlSource };

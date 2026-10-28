@@ -14,7 +14,9 @@ const ring = declared('_ring');
 const tabs = declared('_tabs');
 
 // The page's search functions running for real over a model, a view and a field that record
-// what is done to them. Opening the keyboard only raises searchKeyboardOpen.
+// what is done to them. The keyboard stands in for VirtualKeyboard.qml: offer() opens it for a
+// key the pad sent (no scan code), and closing it hands the focus back to the field, as its
+// onClosed does.
 function searchFixture({ tab = 'all', count = 5, padActive = false, foundAt = 3 } = {}) {
     const calls = [];
     const model = {
@@ -51,16 +53,29 @@ function searchFixture({ tab = 'all', count = 5, padActive = false, foundAt = 3 
         libraryTab: tab, _tabBeforeSearch: 'all', _tabChosenByUser: false,
         searchKeyboardOpen: false, _playtimeEpoch: 0,
         appGrid: view, searchField: field,
+        searchKeyboard: {
+            offer(event) {
+                if (event.nativeScanCode !== 0) return false;
+                globals.openKeyboard();
+                event.accepted = true;
+                return true;
+            },
+            close() { globals.closeKeyboard(); },
+        },
         searchDebounce: { stop() { calls.push(['debounce stopped']); } },
         get searching() { return globals.libraryTab === 'search'; },
         get searchTyping() { return globals.searching && field.activeFocus; },
         focusLibrary() { field.activeFocus = false; calls.push(['focus', 'library']); },
         openKeyboard() { globals.searchKeyboardOpen = true; calls.push(['keyboard']); },
-        closeKeyboard() { globals.searchKeyboardOpen = false; },
+        closeKeyboard() {
+            if (!globals.searchKeyboardOpen) return;
+            globals.searchKeyboardOpen = false;
+            field.forceActiveFocus();
+        },
     };
     globals.appsRoot = globals;
     for (const name of ['setLibraryTab', 'switchLibraryTab', 'enterSearch', 'exitSearch', '_applyQuery',
-                        'focusSearch', 'showResults', 'searchBackspace', 'searchType', 'backOut',
+                        'focusSearch', 'showResults', 'searchBackspace', 'backOut',
                         '_selectAppIdAnyTab']) {
         globals[name] = page.qmlFunction(name, globals);
     }
@@ -98,15 +113,15 @@ test('search is never saved as a tab; the tab LB/RB leave it for is', () => {
     assert.equal(g.globals._tabChosenByUser, true);
 });
 
-test('entering search shows ALL from the first row, with the keyboard only for the pad', () => {
+test('entering search shows ALL from the first row, in the field, with the keyboard still down', () => {
     for (const padActive of [false, true]) {
         const f = searchFixture({ tab: 'games', padActive });
         f.globals.setLibraryTab('search', true);
         assert.equal(f.model.category, 'all');
         assert.equal(f.view.currentIndex, 0);
         assert.equal(f.globals._tabBeforeSearch, 'games');
-        assert.equal(f.globals.searchKeyboardOpen, padActive);
-        assert.equal(f.calls.some((c) => c[0] === 'focus' && c[1] === 'field'), !padActive);
+        assert.equal(f.globals.searchKeyboardOpen, false, 'A in the field opens it, with the pad');
+        assert.ok(f.calls.some((c) => c[0] === 'focus' && c[1] === 'field'));
     }
     const empty = searchFixture({ count: 0 });
     empty.globals.enterSearch(false);
@@ -144,15 +159,15 @@ test('leaving search clears the field and the filter', () => {
     assert.ok(f.calls.some((c) => c[0] === 'debounce stopped'), 'a pending keystroke must not refilter');
 });
 
-test('B closes the keyboard, then the search back to its tab with the find selected, then leaves', () => {
+test('B closes the keyboard to the field, then the search back to its tab with the find selected, then leaves', () => {
     const f = searchFixture({ tab: 'games', padActive: true });
     f.globals.setLibraryTab('search', true);
-    assert.equal(f.globals.searchKeyboardOpen, true);
+    f.globals.openKeyboard();
 
     assert.equal(f.globals.backOut(), true);
     assert.equal(f.globals.searchKeyboardOpen, false);
     assert.equal(f.globals.searching, true);
-    assert.deepEqual(f.calls.at(-1), ['focus', 'library']);
+    assert.deepEqual(f.calls.at(-1), ['focus', 'field']);
 
     assert.equal(f.globals.backOut(), true);
     assert.equal(f.globals.libraryTab, 'games');
@@ -175,35 +190,36 @@ test('B in the field clears what was typed before it closes the search', () => {
     assert.equal(f.globals.libraryTab, 'games');
 });
 
-test('with no results, Done and B keep the field', () => {
+test('with no results, Done keeps the field', () => {
     const f = searchFixture({ count: 0, padActive: true });
     f.globals.enterSearch(true);
-    assert.equal(f.globals.backOut(), true);
+    f.calls.length = 0;
+    f.globals.showResults();
+    assert.equal(f.globals.searchKeyboardOpen, false);
     assert.equal(f.globals.searching, true);
     assert.deepEqual(f.calls.at(-1), ['focus', 'field']);
 });
 
-test('Up from the results goes back to the keyboard with the pad, the field otherwise', () => {
+test('Up from the results goes back to the field, the keyboard still down, with the pad too', () => {
     for (const padActive of [true, false]) {
         const f = searchFixture({ padActive });
         f.globals.enterSearch(false);
         f.calls.length = 0;
         f.globals.focusSearch();
-        assert.equal(f.globals.searchKeyboardOpen, padActive);
-        assert.deepEqual(f.calls, padActive ? [['keyboard']] : [['focus', 'field']]);
+        assert.equal(f.globals.searchKeyboardOpen, false);
+        assert.deepEqual(f.calls, [['focus', 'field']]);
     }
 });
 
-test('the status-bar keyboard prompts edit the field at its cursor', () => {
+test('X in the field deletes before the text cursor', () => {
     const f = searchFixture();
     f.globals.searchBackspace();
     assert.equal(f.field.text, '');
-    f.globals.searchType('hal');
-    f.globals.searchType(' ');
-    assert.equal(f.field.text, 'hal ');
+    f.field.text = 'halo';
+    f.field.cursorPosition = 2;
     f.globals.searchBackspace();
-    f.globals.searchBackspace();
-    assert.equal(f.field.text, 'ha');
+    assert.equal(f.field.text, 'hlo');
+    assert.equal(f.field.cursorPosition, 1);
 });
 
 test('a launch confirmation finds its entry among the results, or leaves search for the tabs', () => {
@@ -266,7 +282,8 @@ test('the search field: Enter and Down apply now and go to the results, Escape c
     const f = searchFixture({ tab: 'games' });
     f.globals.enterSearch(false);
     const handler = page.keyHandler('onPressed', f.globals, { after: 'id: searchField' });
-    const press = (key) => { const e = { key, accepted: false }; handler(e); return e.accepted; };
+    // A real keyboard: every key has a scan code.
+    const press = (key) => { const e = { key, nativeScanCode: 28, accepted: false }; handler(e); return e.accepted; };
 
     f.field.text = 'halo';
     assert.equal(press('Key_Down'), true);
@@ -274,6 +291,16 @@ test('the search field: Enter and Down apply now and go to the results, Escape c
     assert.deepEqual(f.calls.at(-1), ['focus', 'library']);
 
     assert.equal(press('Key_Left'), false, 'the cursor keys stay the field\'s');
+
+    f.globals.enterSearch(false);
+    f.field.text = 'gears';
+    assert.equal(press('Key_Return'), true);
+    assert.equal(f.model.filterText, 'gears', 'Enter on a keyboard: the results, not the keyboard');
+    assert.equal(f.globals.searchKeyboardOpen, false);
+    assert.deepEqual(f.calls.at(-1), ['focus', 'library']);
+    f.globals.enterSearch(false);
+    assert.equal(press('Key_Hangup'), false, 'Y with the keyboard down: Settings, typing no space');
+    assert.equal(f.field.text, 'gears');
 
     f.field.text = 'doom';
     assert.equal(press('Key_F18'), true, 'Start is Done');
@@ -291,6 +318,36 @@ test('the search field: Enter and Down apply now and go to the results, Escape c
     assert.equal(f.globals.searching, true, 'the first Escape only clears');
     assert.equal(press('Key_Escape'), true, 'accepted, or the shell would go Home');
     assert.equal(f.globals.libraryTab, 'games');
+});
+
+test('the pad\'s A in the field opens the keyboard; its Done applies and goes to the results', () => {
+    const f = searchFixture({ tab: 'games', padActive: true });
+    f.globals.setLibraryTab('search', true);
+    const handler = page.keyHandler('onPressed', f.globals, { after: 'id: searchField' });
+    // The pad's keys are built by hand, with no scan code (SdlGamepadKeyNavigation).
+    const press = (key) => { const e = { key, nativeScanCode: 0, accepted: false }; handler(e); return e.accepted; };
+
+    f.field.text = 'halo';
+    f.field.cursorPosition = 4;
+    assert.equal(press('Key_Return'), true, 'pad A');
+    assert.equal(f.globals.searchKeyboardOpen, true);
+    assert.equal(f.globals.searching, true, 'still in the field, not the results');
+    assert.equal(f.model.filterText, '', 'A types nothing and applies nothing');
+
+    assert.equal(press('Key_Menu'), true, 'X deletes in the field too');
+    assert.equal(f.field.text, 'hal');
+    assert.equal(press('Key_Hangup'), false, 'Y is left to Settings with the keyboard down');
+
+    // Start / Done on the keyboard: the keyboard's own accepted() handler, whose close() is
+    // the popup's. VirtualKeyboard gives the field the focus before it, so its onClosed then
+    // leaves the focus where the handler put it.
+    const done = page.signalHandler('onAccepted', f.globals, { after: 'id: searchKeyboard' });
+    f.globals.close = () => { f.globals.searchKeyboardOpen = false; };
+    f.calls.length = 0;
+    done();
+    assert.equal(f.globals.searchKeyboardOpen, false);
+    assert.equal(f.model.filterText, 'hal', 'applied without waiting for the debounce');
+    assert.deepEqual(f.calls.at(-1), ['focus', 'library'], 'the results');
 });
 
 test('Up from the top row goes back to the search, only while searching', () => {
@@ -341,15 +398,13 @@ test('B asks the host page before leaving it, and Settings never does', () => {
 });
 
 test('the status bar: keyboard prompts while it is up, Close search while searching', () => {
-    const hints = (item) => shell.qmlBinding('_hintsApps', { appsLoader: { item }, qsTr: (s) => s });
+    const hints = (item, padActive = false) =>
+        shell.qmlBinding('_hintsApps', { appsLoader: { item }, qsTr: (s) => s, InputHints: { padActive } });
     const base = { layoutActionLabel: 'List layout', gridLayout: false, focusedAppName: '',
                    focusedPinnable: false, focusedMoveLabel: '' };
 
-    const keyboard = hints({ ...base, searching: true, searchKeyboardOpen: true });
-    // Array.from: the bar's array comes from the vm context, and so would a .map() of it.
-    assert.deepEqual(Array.from(keyboard, (h) => [h.btn, h.kind]),
-                     [['A', 'oskType'], ['X', 'oskDelete'], ['Y', 'oskSpace'], ['START', 'oskDone'], ['B', 'back']]);
-    assert.ok(keyboard.every((h) => typeof h.key === 'string'), 'ActionHint.keyLabel is a string');
+    // The keyboard names its own buttons under its keys.
+    assert.equal(hints({ ...base, searching: true, searchKeyboardOpen: true }).length, 0);
 
     // Typing in the field, in Grid with a cover selected: none of the cover's prompts, whose
     // keys would type letters.
@@ -358,10 +413,17 @@ test('the status bar: keyboard prompts while it is up, Close search while search
     for (const [searchHasText, b] of [[true, 'Clear'], [false, 'Close search']]) {
         const typing = hints({ ...grid, searching: true, searchTyping: true, searchHasText,
                                searchKeyboardOpen: false });
+        // Array.from: the bar's array comes from the vm context, and so would a .map() of it.
         assert.deepEqual(Array.from(typing, (h) => [h.btn, h.key, h.kind]),
                          [['A', 'Enter', 'oskDone'], ['Y', '', 'settings'], ['B', 'Esc', 'back']]);
         assert.equal(typing[2].act, b);
     }
+    // With the pad, A is the keyboard and Start the results.
+    const padTyping = hints({ ...grid, searching: true, searchTyping: true, searchHasText: true,
+                              searchKeyboardOpen: false }, true);
+    assert.deepEqual(Array.from(padTyping, (h) => [h.btn, h.kind]),
+                     [['A', 'oskOpen'], ['START', 'oskDone'], ['Y', 'settings'], ['B', 'back']]);
+    assert.equal(padTyping[0].act, 'Keyboard');
 
     const searching = hints({ ...base, searching: true, searchTyping: false, searchKeyboardOpen: false });
     assert.equal(searching.find((h) => h.btn === 'B').act, 'Close search');
@@ -371,17 +433,14 @@ test('the status bar: keyboard prompts while it is up, Close search while search
     assert.equal(hints(null).find((h) => h.btn === 'B').act, 'Hosts');
 });
 
-test('clicking a keyboard prompt does what its button does', () => {
+test('clicking a search prompt does what its button does', () => {
     const calls = [];
     const trigger = shell.qmlFunction('triggerStatusBarAction', {
-        Qt: { Key_Return: 'Return' },
-        SdlGamepadKeyNavigation: { simulateKey: (k) => calls.push(['key', k]) },
         appsLoader: { item: {
-            searchBackspace: () => calls.push('delete'),
-            searchType: (t) => calls.push(['type', t]),
-            showResults: () => calls.push('done'),
+            showResults: () => calls.push('results'),
+            openKeyboard: () => calls.push('keyboard'),
         } },
     });
-    for (const kind of ['oskType', 'oskDelete', 'oskSpace', 'oskDone']) trigger(kind);
-    assert.deepEqual(calls, [['key', 'Return'], 'delete', ['type', ' '], 'done']);
+    for (const kind of ['oskOpen', 'oskDone']) trigger(kind);
+    assert.deepEqual(calls, ['keyboard', 'results']);
 });
